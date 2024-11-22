@@ -13,6 +13,8 @@ using System.Collections.Generic;
 
 namespace brevo_csharp.Client
 {
+    using System;
+
     /// <summary>
     /// Represents a readable-only configuration contract.
     /// </summary>

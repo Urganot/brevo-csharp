@@ -229,7 +229,7 @@ namespace brevo_csharp.Client
                 _basePath = value;
                 // pass-through to ApiClient if it's set.
                 if(_apiClient != null) {
-                    _apiClient.RestClient.BaseUrl = new Uri(_basePath);
+                    _apiClient.HttpClient.BaseAddress = new Uri(_basePath);
                 }
             }
         }
@@ -244,8 +244,8 @@ namespace brevo_csharp.Client
         /// </summary>
         public virtual int Timeout
         {
-            get { return (int)ApiClient.RestClient.Timeout.GetValueOrDefault(TimeSpan.FromSeconds(0)).TotalMilliseconds; }
-            set { ApiClient.RestClient.Timeout = TimeSpan.FromMilliseconds(value); }
+            get { return (int)ApiClient.HttpClient.Timeout.Milliseconds; }
+            set { ApiClient.HttpClient.Timeout = TimeSpan.FromMilliseconds(value); }
         }
 
         /// <summary>

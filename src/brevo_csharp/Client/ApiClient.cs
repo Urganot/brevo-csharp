@@ -1,7 +1,7 @@
-/* 
+/*
  * Brevo API
  *
- * Brevo provide a RESTFul API that can be used with any languages. With this API, you will be able to :   - Manage your campaigns and get the statistics   - Manage your contacts   - Send transactional Emails and SMS   - and much more...  You can download our wrappers at https://github.com/orgs/brevo  **Possible responses**   | Code | Message |   | :- -- -- -- -- -- --: | - -- -- -- -- -- -- |   | 200  | OK. Successful Request  |   | 201  | OK. Successful Creation |   | 202  | OK. Request accepted |   | 204  | OK. Successful Update/Deletion  |   | 400  | Error. Bad Request  |   | 401  | Error. Authentication Needed  |   | 402  | Error. Not enough credit, plan upgrade needed  |   | 403  | Error. Permission denied  |   | 404  | Error. Object does not exist |   | 405  | Error. Method not allowed  |   | 406  | Error. Not Acceptable  | 
+ * Brevo provide a RESTFul API that can be used with any languages. With this API, you will be able to :   - Manage your campaigns and get the statistics   - Manage your contacts   - Send transactional Emails and SMS   - and much more...  You can download our wrappers at https://github.com/orgs/brevo  **Possible responses**   | Code | Message |   | :- -- -- -- -- -- --: | - -- -- -- -- -- -- |   | 200  | OK. Successful Request  |   | 201  | OK. Successful Creation |   | 202  | OK. Request accepted |   | 204  | OK. Successful Update/Deletion  |   | 400  | Error. Bad Request  |   | 401  | Error. Authentication Needed  |   | 402  | Error. Not enough credit, plan upgrade needed  |   | 403  | Error. Permission denied  |   | 404  | Error. Object does not exist |   | 405  | Error. Method not allowed  |   | 406  | Error. Not Acceptable  |
  *
  * OpenAPI spec version: 3.0.0
  * Contact: contact@brevo.com
@@ -12,17 +12,17 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text.RegularExpressions;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
-using RestSharp.Portable;
-using RestSharp.Portable.HttpClient;
 
 namespace brevo_csharp.Client
 {
+    using System.Net.Http;
+
     /// <summary>
     /// API client is mainly responsible for making the HTTP call to the API backend.
     /// </summary>
@@ -30,21 +30,21 @@ namespace brevo_csharp.Client
     {
         private JsonSerializerSettings serializerSettings = new JsonSerializerSettings
         {
-            ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor
+            ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor,
         };
 
         /// <summary>
         /// Allows for extending request processing for <see cref="ApiClient"/> generated code.
         /// </summary>
         /// <param name="request">The RestSharp request object</param>
-        partial void InterceptRequest(IRestRequest request);
+        partial void InterceptRequest(HttpRequestMessage request);
 
         /// <summary>
         /// Allows for extending response processing for <see cref="ApiClient"/> generated code.
         /// </summary>
         /// <param name="request">The RestSharp request object</param>
         /// <param name="response">The RestSharp response object</param>
-        partial void InterceptResponse(IRestRequest request, IRestResponse response);
+        partial void InterceptResponse(HttpRequestMessage request, HttpResponseMessage response);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ApiClient" /> class
@@ -53,8 +53,7 @@ namespace brevo_csharp.Client
         public ApiClient()
         {
             Configuration = brevo_csharp.Client.Configuration.Default;
-            RestClient = new RestClient("https://api.brevo.com/v3");
-            RestClient.IgnoreResponseStatusCode = true;
+            HttpClient = new HttpClient();
         }
 
         /// <summary>
@@ -65,9 +64,7 @@ namespace brevo_csharp.Client
         public ApiClient(Configuration config)
         {
             Configuration = config ?? brevo_csharp.Client.Configuration.Default;
-
-            RestClient = new RestClient(Configuration.BasePath);
-            RestClient.IgnoreResponseStatusCode = true;
+            HttpClient = new HttpClient();
         }
 
         /// <summary>
@@ -77,19 +74,32 @@ namespace brevo_csharp.Client
         /// <param name="basePath">The base path.</param>
         public ApiClient(String basePath = "https://api.brevo.com/v3")
         {
-           if (String.IsNullOrEmpty(basePath))
+            if (String.IsNullOrEmpty(basePath))
                 throw new ArgumentException("basePath cannot be empty");
 
-            RestClient = new RestClient(basePath);
-            RestClient.IgnoreResponseStatusCode = true;
-            Configuration = Client.Configuration.Default;
+            var config = Client.Configuration.Default;
+            config.BasePath = basePath;
+
+            Configuration = config;
+
+            HttpClient = new HttpClient();
+            ConfigureHttpClient();
+        }
+
+        private void ConfigureHttpClient()
+        {
+            HttpClient.BaseAddress = new Uri(Configuration.BasePath);
+            HttpClient.DefaultRequestHeaders.Add("user-agent", Configuration.UserAgent);
+            HttpClient.Timeout = TimeSpan.FromMilliseconds(Configuration.Timeout);
         }
 
         /// <summary>
         /// Gets or sets the default API client for making HTTP calls.
         /// </summary>
         /// <value>The default API client.</value>
-        [Obsolete("ApiClient.Default is deprecated, please use 'Configuration.Default.ApiClient' instead.")]
+        [Obsolete(
+            "ApiClient.Default is deprecated, please use 'Configuration.Default.ApiClient' instead."
+        )]
         public static ApiClient Default;
 
         /// <summary>
@@ -104,48 +114,71 @@ namespace brevo_csharp.Client
         public IReadableConfiguration Configuration { get; set; }
 
         /// <summary>
-        /// Gets or sets the RestClient.
+        /// Gets or sets the HttpClient.
         /// </summary>
-        /// <value>An instance of the RestClient</value>
-        public RestClient RestClient { get; set; }
+        /// <value>An instance of the HttpClient</value>
+        public HttpClient HttpClient { get; set; }
 
-        // Creates and sets up a RestRequest prior to a call.
-        private RestRequest PrepareRequest(
-            String path, Method method, List<KeyValuePair<String, String>> queryParams, Object postBody,
-            Dictionary<String, String> headerParams, Dictionary<String, String> formParams,
-            Dictionary<String, FileParameter> fileParams, Dictionary<String, String> pathParams,
-            String contentType)
+        // Creates and sets up a HttpRequestMessage prior to a call.
+        private HttpRequestMessage PrepareRequest(
+            String path,
+            HttpMethod method,
+            List<KeyValuePair<String, String>> queryParams,
+            Object postBody,
+            Dictionary<String, String> headerParams,
+            Dictionary<String, String> formParams,
+            Dictionary<String, MultipartFormDataContent> fileParams,
+            Dictionary<String, String> pathParams,
+            String contentType
+        )
         {
-            var request = new RestRequest(path, method);
-            // disable ResetSharp.Portable built-in serialization
-            request.Serializer = null;
+            var request = new HttpRequestMessage(method, path);
 
             // add path parameter, if any
-            foreach(var param in pathParams)
-                request.AddParameter(param.Key, param.Value, ParameterType.UrlSegment);
+            foreach (var param in pathParams)
+            {
+                path = path.Replace($"{{{param.Key}}}", param.Value);
+            }
 
             // add header parameter, if any
-            foreach(var param in headerParams)
-                request.AddHeader(param.Key, param.Value);
+            foreach (var param in headerParams)
+            {
+                if (request.Headers.Contains(param.Key))
+                    request.Headers.Remove(param.Key);
+
+                request.Headers.Add(param.Key, param.Value);
+            }
 
             // add query parameter, if any
-            foreach(var param in queryParams)
-                request.AddQueryParameter(param.Key, param.Value);
+            var queryParamsList = queryParams.Select(x => $"{x.Key}={x.Value}").ToList();
+            var queryParamsString = string.Join("&", queryParamsList);
+
+            if (!string.IsNullOrWhiteSpace(queryParamsString))
+                request.RequestUri = new Uri($"{request.RequestUri}?{queryParamsString}");
+
+            var content = new MultipartFormDataContent();
 
             // add form parameter, if any
-            foreach(var param in formParams)
-                request.AddParameter(param.Key, param.Value);
+            content.Add(new FormUrlEncodedContent(formParams));
 
             // add file parameter, if any
-            foreach(var param in fileParams)
+            foreach (var param in fileParams)
             {
-                request.AddFile(param.Value);
+                content.Add(param.Value);
             }
 
             if (postBody != null) // http body (model or byte[]) parameter
             {
-                request.AddParameter(new Parameter { Value = postBody, Type = ParameterType.RequestBody, ContentType = contentType });
+                content.Add(
+                    new StringContent(
+                        JsonConvert.SerializeObject(postBody),
+                        Encoding.UTF8,
+                        "application/json"
+                    )
+                );
             }
+
+            request.Content = content;
 
             return request;
         }
@@ -163,31 +196,37 @@ namespace brevo_csharp.Client
         /// <param name="pathParams">Path parameters.</param>
         /// <param name="contentType">Content Type of the request</param>
         /// <returns>Object</returns>
-        public Object CallApi(
-            String path, Method method, List<KeyValuePair<String, String>> queryParams, Object postBody,
-            Dictionary<String, String> headerParams, Dictionary<String, String> formParams,
-            Dictionary<String, FileParameter> fileParams, Dictionary<String, String> pathParams,
-            String contentType)
+        public HttpResponseMessage CallApi(
+            String path,
+            HttpMethod method,
+            List<KeyValuePair<String, String>> queryParams,
+            Object postBody,
+            Dictionary<String, String> headerParams,
+            Dictionary<String, String> formParams,
+            Dictionary<String, MultipartFormDataContent> fileParams,
+            Dictionary<String, String> pathParams,
+            String contentType
+        )
         {
             var request = PrepareRequest(
-                path, method, queryParams, postBody, headerParams, formParams, fileParams,
-                pathParams, contentType);
-
-            // set timeout
-            RestClient.Timeout = TimeSpan.FromMilliseconds(Configuration.Timeout);
-            
-            // set user agent
-            if (!Configuration.UserAgent.ToLower().StartsWith("brevo_"))
-                Configuration.UserAgent = "brevo_clientAPI/v1.0.0/c#";
-
-            RestClient.UserAgent = Configuration.UserAgent;
+                path,
+                method,
+                queryParams,
+                postBody,
+                headerParams,
+                formParams,
+                fileParams,
+                pathParams,
+                contentType
+            );
 
             InterceptRequest(request);
-            var response = RestClient.Execute(request).Result;
+            var response = HttpClient.Send(request);
             InterceptResponse(request, response);
 
-            return (Object) response;
+            return response;
         }
+
         /// <summary>
         /// Makes the asynchronous HTTP request.
         /// </summary>
@@ -201,19 +240,33 @@ namespace brevo_csharp.Client
         /// <param name="pathParams">Path parameters.</param>
         /// <param name="contentType">Content type.</param>
         /// <returns>The Task instance.</returns>
-        public async System.Threading.Tasks.Task<Object> CallApiAsync(
-            String path, Method method, List<KeyValuePair<String, String>> queryParams, Object postBody,
-            Dictionary<String, String> headerParams, Dictionary<String, String> formParams,
-            Dictionary<String, FileParameter> fileParams, Dictionary<String, String> pathParams,
-            String contentType)
+        public async System.Threading.Tasks.Task<HttpResponseMessage> CallApiAsync(
+            String path,
+            HttpMethod method,
+            List<KeyValuePair<String, String>> queryParams,
+            Object postBody,
+            Dictionary<String, String> headerParams,
+            Dictionary<String, String> formParams,
+            Dictionary<String, MultipartFormDataContent> fileParams,
+            Dictionary<String, String> pathParams,
+            String contentType
+        )
         {
             var request = PrepareRequest(
-                path, method, queryParams, postBody, headerParams, formParams, fileParams,
-                pathParams, contentType);
+                path,
+                method,
+                queryParams,
+                postBody,
+                headerParams,
+                formParams,
+                fileParams,
+                pathParams,
+                contentType
+            );
             InterceptRequest(request);
-            var response = await RestClient.Execute(request);
+            var response = await HttpClient.SendAsync(request);
             InterceptResponse(request, response);
-            return (Object)response;
+            return response;
         }
 
         /// <summary>
@@ -227,17 +280,23 @@ namespace brevo_csharp.Client
         }
 
         /// <summary>
-        /// Create FileParameter based on Stream.
+        /// Create MultipartFormDataContent based on Stream.
         /// </summary>
         /// <param name="name">Parameter name.</param>
         /// <param name="stream">Input stream.</param>
-        /// <returns>FileParameter.</returns>
-        public FileParameter ParameterToFile(string name, Stream stream)
+        /// <returns>MultipartFormDataContent.</returns>
+        public MultipartFormDataContent ParameterToFile(string name, Stream stream)
         {
-            if (stream is FileStream)
-                return FileParameter.Create(name, ReadAsBytes(stream), Path.GetFileName(((FileStream)stream).Name));
-            else
-                return FileParameter.Create(name, ReadAsBytes(stream), "no_file_name_provided");
+            return new MultipartFormDataContent
+            {
+                {
+                    new StreamContent(stream),
+                    name,
+                    (stream is FileStream)
+                        ? Path.GetFileName(((FileStream)stream).Name)
+                        : "no_file_name_provided"
+                },
+            };
         }
 
         /// <summary>
@@ -254,13 +313,13 @@ namespace brevo_csharp.Client
                 // Defaults to an ISO 8601, using the known as a Round-trip date/time pattern ("o")
                 // https://msdn.microsoft.com/en-us/library/az4se3k1(v=vs.110).aspx#Anchor_8
                 // For example: 2009-06-15T13:45:30.0000000
-                return ((DateTime)obj).ToString (Configuration.DateTimeFormat);
+                return ((DateTime)obj).ToString(Configuration.DateTimeFormat);
             else if (obj is DateTimeOffset)
                 // Return a formatted date string - Can be customized with Configuration.DateTimeFormat
                 // Defaults to an ISO 8601, using the known as a Round-trip date/time pattern ("o")
                 // https://msdn.microsoft.com/en-us/library/az4se3k1(v=vs.110).aspx#Anchor_8
                 // For example: 2009-06-15T13:45:30.0000000
-                return ((DateTimeOffset)obj).ToString (Configuration.DateTimeFormat);
+                return ((DateTimeOffset)obj).ToString(Configuration.DateTimeFormat);
             else if (obj is IList)
             {
                 var flattenedString = new StringBuilder();
@@ -275,7 +334,7 @@ namespace brevo_csharp.Client
             else if (obj is bool)
                 return ((bool)obj).ToString().ToLower();
             else
-                return Convert.ToString (obj);
+                return Convert.ToString(obj);
         }
 
         /// <summary>
@@ -284,12 +343,12 @@ namespace brevo_csharp.Client
         /// <param name="response">The HTTP response.</param>
         /// <param name="type">Object type.</param>
         /// <returns>Object representation of the JSON string.</returns>
-        public object Deserialize(IRestResponse response, Type type)
+        public object Deserialize(HttpResponseMessage response, Type type)
         {
-            IHttpHeaders headers = response.Headers;
+            var headers = response.Headers;
             if (type == typeof(byte[])) // return byte array
             {
-                return response.RawBytes;
+                return response.Content.ReadAsByteArrayAsync().Result;
             }
 
             // TODO: ? if (type.IsAssignableFrom(typeof(Stream)))
@@ -300,25 +359,38 @@ namespace brevo_csharp.Client
                     var filePath = String.IsNullOrEmpty(Configuration.TempFolderPath)
                         ? Path.GetTempPath()
                         : Configuration.TempFolderPath;
-                    var regex = new Regex(@"Content-Disposition=.*filename=['""]?([^'""\s]+)['""]?$");
+                    var regex = new Regex(
+                        @"Content-Disposition=.*filename=['""]?([^'""\s]+)['""]?$"
+                    );
                     foreach (var header in headers)
                     {
                         var match = regex.Match(header.ToString());
                         if (match.Success)
                         {
-                            string fileName = filePath + SanitizeFilename(match.Groups[1].Value.Replace("\"", "").Replace("'", ""));
-                            File.WriteAllBytes(fileName, response.RawBytes);
+                            string fileName =
+                                filePath
+                                + SanitizeFilename(
+                                    match.Groups[1].Value.Replace("\"", "").Replace("'", "")
+                                );
+                            File.WriteAllBytes(
+                                fileName,
+                                response.Content.ReadAsByteArrayAsync().Result
+                            );
                             return new FileStream(fileName, FileMode.Open);
                         }
                     }
                 }
-                var stream = new MemoryStream(response.RawBytes);
+                var stream = new MemoryStream(response.Content.ReadAsByteArrayAsync().Result);
                 return stream;
             }
 
             if (type.Name.StartsWith("System.Nullable`1[[System.DateTime")) // return a datetime object
             {
-                return DateTime.Parse(response.Content,  null, System.Globalization.DateTimeStyles.RoundtripKind);
+                return DateTime.Parse(
+                    response.Content.ReadAsStringAsync().Result,
+                    null,
+                    System.Globalization.DateTimeStyles.RoundtripKind
+                );
             }
 
             if (type == typeof(String) || type.Name.StartsWith("System.Nullable")) // return primitive type
@@ -329,7 +401,11 @@ namespace brevo_csharp.Client
             // at this point, it must be a model (json)
             try
             {
-                return JsonConvert.DeserializeObject(response.Content, type, serializerSettings);
+                return JsonConvert.DeserializeObject(
+                    response.Content.ReadAsStringAsync().Result,
+                    type,
+                    serializerSettings
+                );
             }
             catch (Exception e)
             {
@@ -366,8 +442,11 @@ namespace brevo_csharp.Client
         /// <returns>Returns True if MIME type is json.</returns>
         public bool IsJsonMime(String mime)
         {
-            var jsonRegex = new Regex("(?i)^(application/json|[^;/ \t]+/[^;/ \t]+[+]json)[ \t]*(;.*)?$");
-            return mime != null && (jsonRegex.IsMatch(mime) || mime.Equals("application/json-patch+json"));
+            var jsonRegex = new Regex(
+                "(?i)^(application/json|[^;/ \t]+/[^;/ \t]+[+]json)[ \t]*(;.*)?$"
+            );
+            return mime != null
+                && (jsonRegex.IsMatch(mime) || mime.Equals("application/json-patch+json"));
         }
 
         /// <summary>
@@ -437,7 +516,7 @@ namespace brevo_csharp.Client
         /// <returns>Byte array</returns>
         public static byte[] ReadAsBytes(Stream inputStream)
         {
-            byte[] buf = new byte[16*1024];
+            byte[] buf = new byte[16 * 1024];
             using (MemoryStream ms = new MemoryStream())
             {
                 int count;
@@ -504,20 +583,27 @@ namespace brevo_csharp.Client
         }
 
         /// <summary>
-        /// Convert params to key/value pairs. 
+        /// Convert params to key/value pairs.
         /// Use collectionFormat to properly format lists and collections.
         /// </summary>
         /// <param name="name">Key name.</param>
         /// <param name="value">Value object.</param>
         /// <returns>A list of KeyValuePairs</returns>
-        public IEnumerable<KeyValuePair<string, string>> ParameterToKeyValuePairs(string collectionFormat, string name, object value)
+        public IEnumerable<KeyValuePair<string, string>> ParameterToKeyValuePairs(
+            string collectionFormat,
+            string name,
+            object value
+        )
         {
             var parameters = new List<KeyValuePair<string, string>>();
 
             if (IsCollection(value) && collectionFormat == "multi")
             {
                 var valueCollection = value as IEnumerable;
-                parameters.AddRange(from object item in valueCollection select new KeyValuePair<string, string>(name, ParameterToString(item)));
+                parameters.AddRange(
+                    from object item in valueCollection
+                    select new KeyValuePair<string, string>(name, ParameterToString(item))
+                );
             }
             else
             {
